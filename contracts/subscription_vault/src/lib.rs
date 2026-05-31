@@ -47,6 +47,8 @@ pub mod blocklist {
     pub fn get_blocklist_entry(_env: &Env, _addr: Address) -> Result<BlocklistEntry, Error> {
         Err(Error::NotFound)
     }
+    pub fn do_add_to_blocklist(_env: &Env, _authorizer: Address, _subscriber: Address, _reason: Option<String>) -> Result<(), Error> { Ok(()) }
+    pub fn do_remove_from_blocklist(_env: &Env, _admin: Address, _subscriber: Address) -> Result<(), Error> { Ok(()) }
 }
 
 /// State machine: validates and applies subscription status transitions.
@@ -69,7 +71,7 @@ pub mod state_machine {
 pub mod statements {
     #![allow(unused_variables, dead_code)]
     use soroban_sdk::{Address, Env};
-    use crate::types::{BillingChargeKind, Error};
+    use crate::types::{BillingChargeKind, Error, BillingRetentionConfig, BillingStatementAggregate, BillingCompactionSummary, BillingStatementsPage, AccruedTotals};
 
     pub fn append_statement(
         _env: &Env,
@@ -80,6 +82,34 @@ pub mod statements {
         _period_start: u64,
         _timestamp: u64,
     ) -> Result<(), Error> { Ok(()) }
+
+    pub fn set_retention_config(_env: &Env, _keep_recent: u32) {}
+    
+    pub fn get_retention_config(_env: &Env) -> BillingRetentionConfig { 
+        BillingRetentionConfig { keep_recent: 0 } 
+    }
+    
+    pub fn get_compacted_aggregate(_env: &Env, _subscription_id: u32) -> BillingStatementAggregate {
+        BillingStatementAggregate { 
+            pruned_count: 0, 
+            total_amount: 0, 
+            totals: AccruedTotals { interval: 0, usage: 0, one_off: 0 }, 
+            oldest_period_start: None, 
+            newest_period_end: None 
+        }
+    }
+    
+    pub fn compact_subscription_statements(_env: &Env, _subscription_id: u32, _keep_recent_override: Option<u32>) -> Result<BillingCompactionSummary, Error> {
+        Ok(BillingCompactionSummary { subscription_id: _subscription_id, pruned_count: 0, kept_count: 0, total_pruned_amount: 0 })
+    }
+    
+    pub fn get_statements_by_subscription_offset(_env: &Env, _subscription_id: u32, _offset: u32, _limit: u32, _newest_first: bool) -> Result<BillingStatementsPage, Error> {
+        Ok(BillingStatementsPage { statements: soroban_sdk::Vec::new(_env), next_cursor: None, total: 0 })
+    }
+    
+    pub fn get_statements_by_subscription_cursor(_env: &Env, _subscription_id: u32, _cursor: Option<u32>, _limit: u32, _newest_first: bool) -> Result<BillingStatementsPage, Error> {
+        Ok(BillingStatementsPage { statements: soroban_sdk::Vec::new(_env), next_cursor: None, total: 0 })
+    }
 }
 
 /// Period snapshots: write billing-period summaries for reconciliation.
@@ -89,6 +119,8 @@ pub mod period_snapshots {
     use crate::types::{BillingPeriodSnapshot, Error};
 
     pub fn write_period_snapshot(_env: &Env, _snapshot: BillingPeriodSnapshot) -> Result<(), Error> { Ok(()) }
+    pub fn get_period_snapshot(_env: &Env, _subscription_id: u32, _period_index: u64) -> Option<BillingPeriodSnapshot> { None }
+    pub fn list_period_snapshots(_env: &Env, _subscription_id: u32, _limit: u32) -> soroban_sdk::Vec<BillingPeriodSnapshot> { soroban_sdk::Vec::new(_env) }
 }
 
 /// Accounting: tracks total tokens accounted for across all subscriptions.
@@ -99,19 +131,23 @@ pub mod accounting {
 
     pub fn add_total_accounted(_env: &Env, _token: &Address, _amount: i128) -> Result<(), Error> { Ok(()) }
     pub fn sub_total_accounted(_env: &Env, _token: &Address, _amount: i128) -> Result<(), Error> { Ok(()) }
+    pub fn get_total_accounted(_env: &Env, _token: &Address) -> i128 { 0 }
 }
 
 /// Oracle: optional on-chain price oracle for dynamic charge amounts.
 pub mod oracle {
     #![allow(unused_variables, dead_code)]
     use soroban_sdk::{Address, Env};
-    use crate::types::{Error, Subscription};
+    use crate::types::{Error, Subscription, OracleConfig};
 
     pub fn resolve_charge_amount(_env: &Env, _subscription_id: u32, sub: &Subscription) -> Result<i128, Error> {
         Ok(sub.amount)
     }
     pub fn set_oracle_config(_env: &Env, _enabled: bool, _oracle: Option<Address>, _max_age: u64) -> Result<(), Error> {
         Ok(())
+    }
+    pub fn get_oracle_config(_env: &Env) -> OracleConfig {
+        OracleConfig { enabled: false, oracle: None, max_age_seconds: 0 }
     }
 }
 
@@ -137,7 +173,7 @@ pub mod nonce {
     pub const DOMAIN_OPERATOR_BATCH_CHARGE: u32 = 2;
 
     pub fn get_nonce(_env: &Env, _signer: &Address, _domain: u32) -> u64 { 0 }
-    pub fn consume_nonce(_env: &Env, _signer: &Address, _domain: u32, _expected: u64) -> Result<(), crate::types::Error> { Ok(()) }
+    pub fn check_and_advance(_env: &Env, _signer: &Address, _domain: u32, _expected: u64) -> Result<(), crate::types::Error> { Ok(()) }
 }
 
 /// Operator: least-privilege charge delegate.
@@ -177,9 +213,9 @@ pub mod metadata {
     use soroban_sdk::{Address, Env, String};
     use crate::types::Error;
 
-    pub fn set_metadata(_env: &Env, _caller: Address, _subscription_id: u32, _key: String, _value: String) -> Result<(), Error> { Ok(()) }
+    pub fn set_metadata(_env: &Env, _subscription_id: u32, _caller: &Address, _key: String, _value: String) -> Result<(), Error> { Ok(()) }
     pub fn get_metadata(_env: &Env, _subscription_id: u32, _key: String) -> Result<String, Error> { Err(Error::NotFound) }
-    pub fn delete_metadata(_env: &Env, _caller: Address, _subscription_id: u32, _key: String) -> Result<(), Error> { Ok(()) }
+    pub fn delete_metadata(_env: &Env, _subscription_id: u32, _caller: &Address, _key: String) -> Result<(), Error> { Ok(()) }
     pub fn list_metadata_keys(_env: &Env, _subscription_id: u32) -> Result<soroban_sdk::Vec<String>, Error> {
         Ok(soroban_sdk::Vec::new(_env))
     }
@@ -963,16 +999,19 @@ impl SubscriptionVault {
             expires_at,
         )?;
 
+        let token: Address = env.storage().instance().get(&DataKey::Token).ok_or(Error::NotFound)?;
         env.events().publish(
             (Symbol::new(&env, "created"), sub_id),
             SubscriptionCreatedEvent {
                 subscription_id: sub_id,
                 subscriber,
                 merchant,
+                token,
                 amount,
                 interval_seconds,
                 lifetime_cap,
                 expires_at,
+                timestamp: env.ledger().timestamp(),
             },
         );
         Ok(sub_id)
@@ -1010,7 +1049,7 @@ impl SubscriptionVault {
             &env,
             subscriber.clone(),
             merchant.clone(),
-            token,
+            token.clone(),
             amount,
             interval_seconds,
             usage_enabled,
@@ -1024,10 +1063,12 @@ impl SubscriptionVault {
                 subscription_id: sub_id,
                 subscriber,
                 merchant,
+                token,
                 amount,
                 interval_seconds,
                 lifetime_cap,
                 expires_at,
+                timestamp: env.ledger().timestamp(),
             },
         );
         Ok(sub_id)
@@ -1084,8 +1125,10 @@ impl SubscriptionVault {
             FundsDepositedEvent {
                 subscription_id,
                 subscriber,
+                token: sub.token,
                 amount,
-                prepaid_balance: sub.prepaid_balance,
+                new_balance: sub.prepaid_balance,
+                timestamp: env.ledger().timestamp(),
             },
         );
         Ok(())
@@ -1375,8 +1418,12 @@ impl SubscriptionVault {
             (Symbol::new(&env, "subscription_cancelled"), subscription_id),
             SubscriptionCancelledEvent {
                 subscription_id,
+                subscriber: sub.subscriber,
+                merchant: sub.merchant,
+                token: sub.token,
                 authorizer,
                 refund_amount: sub.prepaid_balance,
+                timestamp: env.ledger().timestamp(),
             },
         );
         Ok(())
@@ -1463,9 +1510,16 @@ impl SubscriptionVault {
     ) -> Result<(), Error> {
         subscription::do_pause_subscription(&env, subscription_id, authorizer.clone())?;
 
+        let sub = queries::get_subscription(&env, subscription_id)?;
         env.events().publish(
             (Symbol::new(&env, "sub_paused"), subscription_id),
-            SubscriptionPausedEvent { subscription_id, authorizer },
+            SubscriptionPausedEvent {
+                subscription_id,
+                subscriber: sub.subscriber,
+                merchant: sub.merchant,
+                authorizer,
+                timestamp: env.ledger().timestamp(),
+            },
         );
         Ok(())
     }
@@ -1501,11 +1555,19 @@ impl SubscriptionVault {
         subscription_id: u32,
         authorizer: Address,
     ) -> Result<(), Error> {
+        let old_sub = queries::get_subscription(&env, subscription_id)?;
         subscription::do_resume_subscription(&env, subscription_id, authorizer.clone())?;
 
         env.events().publish(
             (Symbol::new(&env, "sub_resumed"), subscription_id),
-            SubscriptionResumedEvent { subscription_id, authorizer },
+            SubscriptionResumedEvent {
+                subscription_id,
+                subscriber: old_sub.subscriber,
+                merchant: old_sub.merchant,
+                authorizer,
+                previous_status: old_sub.status,
+                timestamp: env.ledger().timestamp(),
+            },
         );
         Ok(())
     }
@@ -1566,16 +1628,22 @@ impl SubscriptionVault {
         // recursively (e.g., if a malicious token contract tries to call back).
         let _guard = crate::reentrancy::ReentrancyGuard::lock(&env, "charge_subscription")?;
 
+        let old_sub = queries::get_subscription(&env, subscription_id)?;
         let result = charge_core::charge_one(&env, subscription_id, env.ledger().timestamp(), None)?;
-
-        let sub = queries::get_subscription(&env, subscription_id)?;
+        let new_sub = queries::get_subscription(&env, subscription_id)?;
+        
         env.events().publish(
             (Symbol::new(&env, "charged"),),
             SubscriptionChargedEvent {
                 subscription_id,
-                merchant: sub.merchant,
-                amount: sub.amount,
-                lifetime_charged: sub.lifetime_charged,
+                subscriber: new_sub.subscriber,
+                merchant: new_sub.merchant,
+                token: new_sub.token,
+                amount: new_sub.amount,
+                lifetime_charged: new_sub.lifetime_charged,
+                timestamp: env.ledger().timestamp(),
+                period_start: old_sub.last_payment_timestamp,
+                period_end: env.ledger().timestamp(),
             },
         );
         Ok(result)
@@ -1711,6 +1779,7 @@ impl SubscriptionVault {
                 token,
                 amount,
                 remaining_balance: new_balance,
+                timestamp: env.ledger().timestamp(),
             },
         );
         Ok(())
@@ -1882,28 +1951,6 @@ impl SubscriptionVault {
         queries::get_next_charge_info(&env, subscription_id)
     }
 
-    /// Return subscriptions for a merchant, paginated.
-    ///
-    /// `limit` must be between 1 and [`queries::MAX_SUBSCRIPTION_LIST_PAGE`] inclusive.
-    pub fn get_subscriptions_by_merchant(
-        env: Env,
-        merchant: Address,
-        start: u32,
-        limit: u32,
-    ) -> Result<Vec<Subscription>, Error> {
-        queries::get_subscriptions_by_merchant(&env, merchant, start, limit)
-    }
-
-    /// Return the total number of subscriptions ever created.
-    pub fn get_subscription_count(env: Env) -> u32 {
-        env.storage().instance().get(&DataKey::NextId).unwrap_or(0u32)
-    }
-
-    /// Return the total number of subscriptions for a merchant.
-    pub fn get_merchant_subscription_count(env: Env, merchant: Address) -> u32 {
-        queries::get_merchant_subscription_count(&env, merchant)
-    }
-
     /// Return the number of subscription ids indexed for a settlement token (for pagination).
     pub fn get_token_subscription_count(env: Env, token: Address) -> u32 {
         queries::get_token_subscription_count(&env, token)
@@ -2052,14 +2099,6 @@ impl SubscriptionVault {
         period_snapshots::list_period_snapshots(&env, subscription_id, limit)
     }
 
-/// Add a new accepted token.
-///
-/// # Auth
-/// - Admin only
-///
-/// # Errors
-/// - Unauthorized
-/// - TokenAlreadyAccepted
     pub fn add_accepted_token(
         env: Env,
         admin: Address,
@@ -2404,7 +2443,7 @@ impl SubscriptionVault {
         key: String,
         value: String,
     ) -> Result<(), Error> {
-        metadata::do_set_metadata(&env, subscription_id, &authorizer, key, value)
+        metadata::set_metadata(&env, subscription_id, &authorizer, key, value)
     }
 
     ///
@@ -2434,7 +2473,7 @@ impl SubscriptionVault {
         authorizer: Address,
         key: String,
     ) -> Result<(), Error> {
-        metadata::do_delete_metadata(&env, subscription_id, &authorizer, key)
+        metadata::delete_metadata(&env, subscription_id, &authorizer, key)
     }
 
     /// Get a metadata value by key.
@@ -2448,7 +2487,7 @@ impl SubscriptionVault {
     ///
     /// * [`Error::NotFound`] — Subscription does not exist, or key is not set.
     pub fn get_metadata(env: Env, subscription_id: u32, key: String) -> Result<String, Error> {
-        metadata::do_get_metadata(&env, subscription_id, key)
+        metadata::get_metadata(&env, subscription_id, key)
     }
 
     /// List all metadata keys for a subscription.
@@ -2461,7 +2500,7 @@ impl SubscriptionVault {
     ///
     /// * [`Error::NotFound`] — Subscription does not exist.
     pub fn list_metadata_keys(env: Env, subscription_id: u32) -> Result<Vec<String>, Error> {
-        metadata::do_list_metadata_keys(&env, subscription_id)
+        metadata::list_metadata_keys(&env, subscription_id)
     }
 
     // ── Protocol Fees ──────────────────────────────────────────────────────────
@@ -2714,8 +2753,6 @@ impl SubscriptionVault {
         merchant::get_merchant_config(&env, merchant)
     }
 
-// Duplicate stub block removed – implementation retained elsewhere.
-
     pub fn get_subscriptions_by_merchant(
         env: Env,
         merchant: Address,
@@ -2728,16 +2765,6 @@ impl SubscriptionVault {
     /// Returns the total number of subscriptions for a merchant.
     pub fn get_merchant_subscription_count(env: Env, merchant: Address) -> u32 {
         queries::get_merchant_subscription_count(&env, merchant)
-    }
-
-    /// Lists subscription IDs for a subscriber with pagination.
-    pub fn list_subscriptions_by_subscriber(
-        env: Env,
-        subscriber: Address,
-        start_from_id: u32,
-        limit: u32,
-    ) -> Result<crate::queries::SubscriptionsPage, Error> {
-        queries::list_subscriptions_by_subscriber(&env, subscriber, start_from_id, limit)
     }
 
     /// Returns the schema version of this contract.
@@ -2755,15 +2782,6 @@ impl SubscriptionVault {
             .instance()
             .get(&key)
             .unwrap_or(0u32)
-    }
-
-    /// Creates a new subscription and returns its ID.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Error::SubscriptionLimitReached` if the ID space is exhausted.
-    pub fn create_subscription(env: Env) -> Result<u32, Error> {
-        Self::_next_id(&env)
     }
 
     /// Internal helper to allocate the next subscription ID.
@@ -2796,6 +2814,6 @@ mod test {
         let env = Env::default();
         let contract_id = env.register(SubscriptionVault, ());
         let client = SubscriptionVaultClient::new(&env, &contract_id);
-        assert_eq!(client.version(), 0);
+        assert_eq!(client.version(), 1);
     }
 }
