@@ -52,20 +52,7 @@ pub mod blocklist {
 }
 
 /// State machine: validates and applies subscription status transitions.
-pub mod state_machine {
-    #![allow(unused_variables, dead_code)]
-    use crate::types::{Error, SubscriptionStatus};
-
-    pub fn transition_to(current: &mut SubscriptionStatus, next: SubscriptionStatus) -> Result<(), Error> {
-        *current = next;
-        Ok(())
-    }
-    pub fn can_transition(from: &SubscriptionStatus, to: &SubscriptionStatus) -> bool { true }
-    pub fn validate_status_transition(from: &SubscriptionStatus, to: &SubscriptionStatus) -> Result<(), Error> { Ok(()) }
-    pub fn get_allowed_transitions(from: &SubscriptionStatus) -> soroban_sdk::Vec<SubscriptionStatus> {
-        soroban_sdk::Vec::new(&soroban_sdk::Env::default())
-    }
-}
+pub mod state_machine;
 
 /// Billing statements: append-only ledger of charges per subscription.
 pub mod statements {
@@ -74,8 +61,8 @@ pub mod statements {
     use crate::types::{BillingChargeKind, Error, BillingRetentionConfig, BillingStatementAggregate, BillingCompactionSummary, BillingStatementsPage, AccruedTotals};
 
     pub fn append_statement(
-        _env: &Env,
-        _subscription_id: u32,
+        env: &Env,
+        subscription_id: u32,
         _amount: i128,
         _merchant: Address,
         _kind: BillingChargeKind,
@@ -116,7 +103,10 @@ pub mod statements {
 pub mod period_snapshots {
     #![allow(unused_variables, dead_code)]
     use soroban_sdk::Env;
-    use crate::types::{BillingPeriodSnapshot, Error};
+    use crate::types::{
+        BillingPeriodSnapshot, BILLING_PERIOD_SNAPSHOT_TTL_EXTEND_TO,
+        BILLING_PERIOD_SNAPSHOT_TTL_THRESHOLD, DataKey, Error,
+    };
 
     pub fn write_period_snapshot(_env: &Env, _snapshot: BillingPeriodSnapshot) -> Result<(), Error> { Ok(()) }
     pub fn get_period_snapshot(_env: &Env, _subscription_id: u32, _period_index: u64) -> Option<BillingPeriodSnapshot> { None }
@@ -231,6 +221,7 @@ pub use queries::{
 pub use state_machine::{can_transition, get_allowed_transitions, validate_status_transition};
 pub use types::{
     AcceptedToken, AccruedTotals, AdminRotatedEvent, BatchChargeResult, BatchWithdrawResult,
+    NonceConsumedEvent,
     BillingChargeKind, BillingCompactedEvent, BillingCompactionSummary, BillingPeriodSnapshot,
     BillingRetentionConfig, BillingStatement, BillingStatementAggregate, BillingStatementsPage,
     CapInfo, ChargeExecutionResult, ContractSnapshot, DataKey, EmergencyStopDisabledEvent,
