@@ -428,24 +428,27 @@ pub use types::{
     BillingChargeKind, BillingCompactedEvent, BillingCompactionSummary, BillingPeriodSnapshot,
     BillingRetentionConfig, BillingStatement, BillingStatementAggregate, BillingStatementsPage,
     CapInfo, ChargeExecutionResult, ContractSnapshot, DataKey, EmergencyStopDisabledEvent,
-    EmergencyStopEnabledEvent, Error, FundsDepositedEvent, GlobalCapDefaultUpdatedEvent,
-    LifetimeCapReachedEvent, LifetimeCapUpdatedEvent, MerchantCapDefaultUpdatedEvent,
-    MerchantConfig, MerchantConfigInitializedEvent, MerchantConfigUpdatedEvent,
-    MerchantPausedEvent, MerchantUnpausedEvent, MerchantWithdrawalEvent, MetadataDeletedEvent,
-    MetadataSetEvent, MigrationExportEvent, NextChargeInfo, NonceConsumedEvent, OneOffChargedEvent,
-    OperatorRemovedEvent, OperatorSetEvent, OracleConfig, OraclePrice, PartialRefundEvent,
-    PlanTemplate, PlanTemplateUpdatedEvent, PrepaidQueryRequest, PrepaidQueryResult,
-    ProtocolFeeChargedEvent, ProtocolFeeConfiguredEvent, ReconciliationProof,
-    ReconciliationSummaryPage, RecoveryEvent, RecoveryReason, SubscriberWithdrawalEvent,
-    Subscription, SubscriptionArchivedEvent, SubscriptionCancelledEvent,
-    SubscriptionChargeFailedEvent, SubscriptionChargedEvent, SubscriptionCreatedEvent,
-    SubscriptionExpiredEvent, SubscriptionMigratedEvent, SubscriptionPausedEvent,
-    SubscriptionRecoveryReadyEvent, SubscriptionResumedEvent, SubscriptionStatus,
-    SubscriptionSummary, TokenEarnings, TokenLiabilities, TokenReconciliationSnapshot,
-    UsageChargeResult, UsageLimits, UsageState, UsageStatementEvent, DEFAULT_ALLOWED_OPS,
-    MAX_METADATA_KEYS, MAX_METADATA_KEY_LENGTH, MAX_METADATA_VALUE_LENGTH, OP_AUTO_RENEWAL,
-    OP_BILLING_PAUSE, OP_CHARGE, OP_REFUND, OP_WITHDRAW, SNAPSHOT_FLAG_CLOSED, SNAPSHOT_FLAG_EMPTY,
-    SNAPSHOT_FLAG_INTERVAL_CHARGED, SNAPSHOT_FLAG_USAGE_CHARGED,
+    EmergencyStopEnabledEvent, Error, FundsDepositedEvent, LifetimeCapReachedEvent, MerchantConfig,
+    MerchantConfigInitializedEvent, MerchantConfigUpdatedEvent, MerchantPausedEvent,
+    MerchantUnpausedEvent, MerchantWithdrawalEvent, MetadataDeletedEvent,
+    MetadataSetEvent, MigrationExportEvent, SchemaMigratedEvent, NextChargeInfo, OneOffChargedEvent, OracleConfig,
+    OraclePrice, PartialRefundEvent, PlanTemplate, PlanTemplateUpdatedEvent,
+    ProtocolFeeChargedEvent, ProtocolFeeConfiguredEvent, RecoveryEvent, RecoveryReason,
+    Subscription, SubscriptionCancelledEvent, SubscriptionChargeFailedEvent,
+    SubscriptionChargedEvent, SubscriptionCreatedEvent, SubscriptionMigratedEvent,
+    SubscriptionPausedEvent, SubscriptionRecoveryReadyEvent, SubscriptionResumedEvent,
+    SubscriptionStatus, SubscriptionSummary, SubscriberWithdrawalEvent,
+    SubscriptionArchivedEvent, SubscriptionExpiredEvent,
+    TokenEarnings, TokenReconciliationSnapshot, UsageChargeResult, UsageLimits, UsageState, UsageStatementEvent,
+    MAX_METADATA_KEYS, MAX_METADATA_KEY_LENGTH, MAX_METADATA_VALUE_LENGTH,
+    SNAPSHOT_FLAG_CLOSED, SNAPSHOT_FLAG_EMPTY, SNAPSHOT_FLAG_INTERVAL_CHARGED,
+    SNAPSHOT_FLAG_USAGE_CHARGED,
+    OP_CHARGE, OP_WITHDRAW, OP_REFUND, OP_BILLING_PAUSE, OP_AUTO_RENEWAL,
+    DEFAULT_ALLOWED_OPS,
+    GlobalCapDefaultUpdatedEvent, LifetimeCapUpdatedEvent, MerchantCapDefaultUpdatedEvent,
+    OperatorRemovedEvent, OperatorSetEvent,
+    PrepaidQueryRequest, PrepaidQueryResult, ReconciliationProof, ReconciliationSummaryPage,
+    TokenLiabilities,
 };
 
 /// Maximum subscription ID this contract will ever allocate.
@@ -985,32 +988,6 @@ impl SubscriptionVault {
     /// No event is emitted for the idempotent no-op case.
     pub fn migrate(env: Env, admin: Address) -> Result<(), Error> {
         admin::do_migrate(&env, admin, STORAGE_VERSION)
-    }
-
-    /// Schema migration entrypoint — alias for [`migrate`](Self::migrate).
-    ///
-    /// Compares the on-chain `DataKey::SchemaVersion` against the binary's
-    /// `STORAGE_VERSION` and runs the forward upgrade ladder when needed.
-    ///
-    /// Returns [`Error::SchemaVersionTooHigh`] (instead of
-    /// [`Error::SchemaMigrationDowngrade`]) when the stored version is newer
-    /// than the binary, so callers that check for that variant are satisfied.
-    ///
-    /// # Auth
-    ///
-    /// Admin only.
-    ///
-    /// # Errors
-    ///
-    /// * [`Error::Unauthorized`]          — Caller is not the stored admin.
-    /// * [`Error::NotInitialized`]        — Contract has not been initialised.
-    /// * [`Error::SchemaVersionTooHigh`]  — Stored version is newer than binary.
-    pub fn migrate_schema(env: Env, admin: Address) -> Result<(), Error> {
-        admin::do_migrate(&env, admin, STORAGE_VERSION)
-            .map_err(|e| match e {
-                Error::SchemaMigrationDowngrade => Error::SchemaVersionTooHigh,
-                other => other,
-            })
     }
 
     /// Export contract-level configuration as a [`ContractSnapshot`] for migration tooling.
