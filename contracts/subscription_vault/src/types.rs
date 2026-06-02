@@ -3,7 +3,7 @@
 //! Kept in a separate module to reduce merge conflicts when editing state machine
 //! or contract entrypoints.
 
-use soroban_sdk::{ contracterror, contracttype, Address, String, Vec };
+use soroban_sdk::{contracterror, contracttype, Address, String, Vec};
 
 /// Maximum number of metadata keys per subscription.
 pub const MAX_METADATA_KEYS: u32 = 10;
@@ -159,6 +159,10 @@ pub enum DataKey {
     BillingPeriodSnapshotIndex(u32),
     /// Admin nonce for replay protection keyed by (admin_address, domain).
     AdminNonce(Address, u32),
+    /// Per-subscription metadata key-value pair.
+    Metadata(u32, String),
+    /// Per-subscription list of metadata keys.
+    MetadataKeys(u32),
     /// Operator key.
     Operator,
     /// Global billing statement retention configuration.
@@ -253,7 +257,11 @@ pub struct Subscription {
 
 impl Subscription {
     pub fn is_expired(&self, current_time: u64) -> bool {
-        if let Some(exp) = self.expires_at { current_time >= exp } else { false }
+        if let Some(exp) = self.expires_at {
+            current_time >= exp
+        } else {
+            false
+        }
     }
 }
 
@@ -317,7 +325,6 @@ pub enum Error {
     MetadataValueTooLong = 3006,
     /// Oracle returned a non-positive price.
     OraclePriceInvalid = 3007,
-
 
     // --- State Transition (4000-4099) ---
     /// The requested state transition is not allowed by the state machine.
@@ -805,13 +812,13 @@ pub struct PeriodBillingStatement {
 /// Period had at least one interval charge.
 pub const STMT_FLAG_INTERVAL_CHARGED: u32 = 0b0000_0001;
 /// Period had at least one usage charge.
-pub const STMT_FLAG_USAGE_CHARGED: u32    = 0b0000_0010;
+pub const STMT_FLAG_USAGE_CHARGED: u32 = 0b0000_0010;
 /// Period had at least one one-off charge.
-pub const STMT_FLAG_ONEOFF_CHARGED: u32   = 0b0000_0100;
+pub const STMT_FLAG_ONEOFF_CHARGED: u32 = 0b0000_0100;
 /// Subscription was cancelled during this period.
-pub const STMT_FLAG_CANCELLED: u32        = 0b0000_1000;
+pub const STMT_FLAG_CANCELLED: u32 = 0b0000_1000;
 /// Subscriber withdrew remaining balance; period is fully settled.
-pub const STMT_FLAG_SETTLED: u32          = 0b0001_0000;
+pub const STMT_FLAG_SETTLED: u32 = 0b0001_0000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1141,8 +1148,6 @@ pub struct MetadataDeletedEvent {
     pub key: String,
     pub authorizer: Address,
 }
-
-
 
 /// Event emitted when a plan template is updated.
 #[contracttype]
@@ -1580,4 +1585,3 @@ pub struct PrepaidQueryResult {
     /// Whether more subscriptions may exist beyond this scan window.
     pub has_more: bool,
 }
-
